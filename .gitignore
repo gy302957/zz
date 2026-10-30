@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.vscode/
+
+ragas_eval/models/
+
+chroma.db*/
+md5.txt*
+
+chat_history/
