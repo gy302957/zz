@@ -14,6 +14,8 @@ chunk_overlap=200
 
 #retriever
 top_k=3
+rerank_candidates=10
+reranker_model="ragas_eval/models/bge-reranker-large"
 
 embedding_model="ragas_eval/models/bge-large-zh-v1.5"
 chat_model="mimo-v2.6-flash"

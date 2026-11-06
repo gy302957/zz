@@ -1,8 +1,10 @@
+import asyncio
 import os
+import types
 
 import pytest
 
-from ragas_eval.ragas_eval import parse_list_fields
+from ragas_eval.ragas_eval import _safe_score, parse_list_fields
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 TESTSET_NAME = "ragas_testset_with_answers-v1"
@@ -52,3 +54,22 @@ def test_load_and_parse_real_dataset():
     assert len(row["retrieved_contexts"]) >= 1
     assert all(isinstance(c, str) for c in row["retrieved_contexts"])
     assert isinstance(row["reference_contexts"], list)
+
+
+class _StubMetric:
+    def __init__(self, value=None, error=None):
+        self.value = value
+        self.error = error
+
+    async def ascore(self, **kwargs):
+        if self.error is not None:
+            raise self.error
+        return types.SimpleNamespace(value=self.value)
+
+
+def test_safe_score_returns_value():
+    assert asyncio.run(_safe_score(_StubMetric(value=0.5), "stub")) == 0.5
+
+
+def test_safe_score_failure_returns_none():
+    assert asyncio.run(_safe_score(_StubMetric(error=ValueError("missing")), "stub")) is None

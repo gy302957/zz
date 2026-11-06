@@ -35,6 +35,16 @@ def parse_list_fields(row):
     return row
 
 
+async def _safe_score(metric, label: str, **kwargs) -> float | None:
+    """单指标评分失败时只置空该指标，不让整行失败"""
+    try:
+        result = await metric.ascore(**kwargs)
+        return result.value
+    except Exception as e:
+        print(f"⚠️ {label} 本行留空: {type(e).__name__}: {str(e)[:80]}")
+        return None
+
+
 async def main():
     client = AsyncOpenAI(
         api_key=MM_API_KEY,
@@ -58,7 +68,7 @@ async def main():
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(current_dir)
-    dataset = Dataset.load(name="ragas_testset_with_answers", backend="local/csv",
+    dataset = Dataset.load(name="ragas_testset_with_answers-v2", backend="local/csv",
                        root_dir=project_root)
     for row in dataset:
         parse_list_fields(row)
@@ -73,44 +83,44 @@ async def main():
     class ExperimentResult(BaseModel):
         user_input: str
         synthesizer_name: str
-        faithfulness: float
-        answer_relevancy: float
-        context_recall: float
-        context_precision_with_reference: float
+        faithfulness: float | None = None
+        answer_relevancy: float | None = None
+        context_recall: float | None = None
+        context_precision_with_reference: float | None = None
 
     @experiment(ExperimentResult)
     async def run_evaluation(row):
         # semaphore 把同时在跑的样本数限制住，避免打满 API 的并发上限
         async with semaphore:
-            faith_result = await faithfulness.ascore(
-                user_input=row['user_input'],
-                response=row['response'],
-                retrieved_contexts=row['retrieved_contexts']
-            )
-            relevancy_result = await answer_relevancy.ascore(
-                user_input=row['user_input'],
-                response=row['response']
-            )
-            recall_result = await context_recall.ascore(
-                user_input=row['user_input'],
-                retrieved_contexts=row['retrieved_contexts'],
-                reference=row['reference']
-            )
-            context_precision_result = await context_precision_with_reference.ascore(
-                user_input=row['user_input'],
-                retrieved_contexts=row['retrieved_contexts'],
-                reference=row['reference']
-            )
             return ExperimentResult(
                 user_input=row['user_input'],
                 synthesizer_name=row['synthesizer_name'],
-                faithfulness=faith_result.value,
-                answer_relevancy=relevancy_result.value,
-                context_recall=recall_result.value,
-                context_precision_with_reference=context_precision_result.value
+                faithfulness=await _safe_score(
+                    faithfulness, "faithfulness",
+                    user_input=row['user_input'],
+                    response=row['response'],
+                    retrieved_contexts=row['retrieved_contexts'],
+                ),
+                answer_relevancy=await _safe_score(
+                    answer_relevancy, "answer_relevancy",
+                    user_input=row['user_input'],
+                    response=row['response'],
+                ),
+                context_recall=await _safe_score(
+                    context_recall, "context_recall",
+                    user_input=row['user_input'],
+                    retrieved_contexts=row['retrieved_contexts'],
+                    reference=row['reference'],
+                ),
+                context_precision_with_reference=await _safe_score(
+                    context_precision_with_reference, "context_precision",
+                    user_input=row['user_input'],
+                    retrieved_contexts=row['retrieved_contexts'],
+                    reference=row['reference'],
+                ),
             )
 
-    exp_results = await run_evaluation.arun(dataset, name="ragas_eval_v1")
+    exp_results = await run_evaluation.arun(dataset, name="ragas_eval_v2")
     print('✅ 评估完成')
     print(exp_results)
 

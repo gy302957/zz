@@ -152,7 +152,7 @@ def run_with_trace(question: str, thread_id: str = "default"):
 
 
 def batch_get_answers(input_path: str = "datasets/ragas_testset.csv", output_path: str | None = None) -> None:
-    """读取测试集 CSV，逐条由 agent 作答，把结果写入 response 和 retrieved_contexts 列"""
+    """读取测试集 CSV，逐条由 agent 作答，把结果写入 response、retrieved_contexts 和 tool_calls 列"""
     df = pd.read_csv(input_path)
     if "user_input" not in df.columns:
         raise ValueError(f"{input_path} 中缺少 user_input 列")
@@ -160,6 +160,8 @@ def batch_get_answers(input_path: str = "datasets/ragas_testset.csv", output_pat
         df["response"] = ""
     if "retrieved_contexts" not in df.columns:
         df["retrieved_contexts"] = "[]"
+    if "tool_calls" not in df.columns:
+        df["tool_calls"] = "[]"
     if output_path is None:
         output_path = input_path.replace(".csv", "_with_answers.csv")
 
@@ -169,13 +171,15 @@ def batch_get_answers(input_path: str = "datasets/ragas_testset.csv", output_pat
         query = str(row["user_input"])
         try:
             _service.retrieved_contexts = []
-            answer = ask(query, thread_id=f"eval-{run_id}-{i}")
+            answer, calls = run_with_trace(query, thread_id=f"eval-{run_id}-{i}")
             df.at[i, "response"] = answer
             df.at[i, "retrieved_contexts"] = repr(_service.retrieved_contexts)
+            df.at[i, "tool_calls"] = repr(calls)
             print(f"[{i + 1}/{len(df)}] ✅ {query[:30]} -> {str(answer)[:60]}")
         except Exception as e:
             df.at[i, "response"] = f"[ERROR] {e}"
             df.at[i, "retrieved_contexts"] = "[]"
+            df.at[i, "tool_calls"] = "[]"
             print(f"[{i + 1}/{len(df)}] ❌ {query[:30]}　失败: {e}")
 
     df.to_csv(output_path, index=False, encoding="utf-8")

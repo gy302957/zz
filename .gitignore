@@ -8,5 +8,6 @@ ragas_eval/models/
 
 chroma.db*/
 md5.txt*
+*.bak-*
 
 chat_history/
