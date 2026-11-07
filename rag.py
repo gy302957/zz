@@ -37,16 +37,34 @@ class ragservice():
         )
 
         self.retrieved_contexts: list[str] = []
+        self.retriever = self.vectorstore.get_hybrid_retriever()
         self.chain = self.get_chain()
 
+    def retrieve_and_capture(self, query: str) -> list[Document]:
+        """执行混合检索并将新结果追加到 retrieved_contexts（评估用的检索捕获）"""
+        docs = self.retriever(query)
+        for content in (d.page_content for d in docs):
+            if content not in self.retrieved_contexts:
+                self.retrieved_contexts.append(content)
+        return docs
+
+    def get_documents(self, query: str) -> str:
+        """检索知识库，返回带 [1][2][3] 引用标记的原文片段。
+
+        agent 拿到带编号的片段后自行综合作答，并在关键信息处标注 [1][2] 等来源编号。
+        这样做让回答可溯源，也让 faithfulness 评估能核验每条陈述的依据。
+        """
+        docs = self.retrieve_and_capture(query)
+        if not docs:
+            return "没有检索到相关资料"
+        parts = []
+        for i, doc in enumerate(docs, 1):
+            src = doc.metadata.get("source", "")
+            tag = f"（来源：{src}）" if src else ""
+            parts.append(f"[{i}]{tag} {doc.page_content}")
+        return "\n\n".join(parts)
+
     def get_chain(self):
-        retriever=self.vectorstore.get_hybrid_retriever()
-        def retrieve_and_capture(query: str):
-            docs = retriever(query)
-            for content in (d.page_content for d in docs):
-                if content not in self.retrieved_contexts:
-                    self.retrieved_contexts.append(content)
-            return docs
         def format_document(docs: list[Document]):
             if not docs:
                 return "没有检索到相关资料"
@@ -71,7 +89,7 @@ class ragservice():
             {
                 "input": RunnablePassthrough(),
                 "context": RunnableLambda(format_for_retriever)
-                | RunnableLambda(retrieve_and_capture)
+                | RunnableLambda(self.retrieve_and_capture)
                 | format_document,
             }
             | RunnableLambda(format_for_template)

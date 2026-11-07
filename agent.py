@@ -7,7 +7,6 @@ from typing import Annotated, TypedDict
 import pandas as pd
 from pydantic import SecretStr
 from langchain_core.messages import SystemMessage
-from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
@@ -36,13 +35,9 @@ _service = ragservice()
 
 
 @tool
-def rag_search(query: str, config: RunnableConfig) -> str:
-    """检索公司福利、差旅、休假等制度知识库，回答政策类问题。"""
-    thread_id = config.get("configurable", {}).get("thread_id", "default")
-    return _service.chain.invoke(
-        {"input": query},
-        {"configurable": {"session_id": f"rag-{thread_id}"}},
-    )
+def rag_search(query: str) -> str:
+    """检索公司福利、差旅、休假等制度知识库，返回相关原文片段供回答使用。"""
+    return _service.get_documents(query)
 
 
 @tool
@@ -99,7 +94,8 @@ SYSTEM_PROMPT = (
     "1. 用户问的是制度、政策、规则、报销条件等知识性问题，调用 rag_search 检索知识库。\n"
     "2. 用户给出了具体数字、要求直接计算年假天数或住宿上限时，调用对应计算工具 calculate_annual_leave 或 calculate_hotel_cap。\n"
     "3. 知识库检索不到、或问题超出公司制度范围，调用 human_handoff 转人工，不要编造答案。\n"
-    "4. 拿到工具结果后判断是否已经能回答；不能就继续调用工具，能就直接回答。\n"
+    "4. rag_search 返回的资料带有 [1][2][3] 编号，回答时在关键信息后标注对应编号以标明来源，如 [1][2]。\n"
+    "5. 拿到工具结果后判断是否已经能回答；不能就继续调用工具，能就直接回答。\n"
 )
 
 

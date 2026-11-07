@@ -68,7 +68,7 @@ async def main():
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(current_dir)
-    dataset = Dataset.load(name="ragas_testset_with_answers-v2", backend="local/csv",
+    dataset = Dataset.load(name="ragas_testset_with_answers-v3", backend="local/csv",
                        root_dir=project_root)
     for row in dataset:
         parse_list_fields(row)
@@ -120,7 +120,7 @@ async def main():
                 ),
             )
 
-    exp_results = await run_evaluation.arun(dataset, name="ragas_eval_v2")
+    exp_results = await run_evaluation.arun(dataset, name="ragas_eval_v3")
     print('✅ 评估完成')
     print(exp_results)
 
